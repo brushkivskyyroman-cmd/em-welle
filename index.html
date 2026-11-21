@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Elektromagnetische Welle – Animation</title>
+<style>
+:root{
+  --bg:#f3f6fc; --surface:#ffffff; --text:#0b1630; --muted:#4a5878; --border:#cfd8ea;
+  --e:#1f6bff; --b:#e07800; --axis:#0b1630; --accent:#1f6bff; --accent-text:#ffffff;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#060d1f; --surface:#0e1a36; --text:#eaf2ff; --muted:#9fb2d6; --border:#25365f;
+    --e:#5aa9ff; --b:#ffb454; --axis:#ffffff; --accent:#5aa9ff; --accent-text:#06122b;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#060d1f; --surface:#0e1a36; --text:#eaf2ff; --muted:#9fb2d6; --border:#25365f;
+  --e:#5aa9ff; --b:#ffb454; --axis:#ffffff; --accent:#5aa9ff; --accent-text:#06122b;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;line-height:1.5}
+main{max-width:1000px;margin:0 auto;padding:20px 16px 32px}
+h1{font-size:clamp(1.4rem,4vw,2rem);margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px}
+canvas{display:block;width:100%;border-radius:8px}
+.controls{display:grid;gap:14px;margin-top:14px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.group h2{font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit;cursor:pointer;color:var(--text);background:transparent;border:1.5px solid var(--border);border-radius:999px;padding:9px 16px;min-height:44px;display:inline-flex;align-items:center;gap:8px}
+button:hover{border-color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--muted)}
+#tE .dot{background:var(--e)} #tB .dot{background:var(--b)}
+button[aria-checked="false"]{opacity:.55}
+button[aria-checked="false"] .dot{background:transparent;box-shadow:inset 0 0 0 2px var(--muted)}
+button[aria-checked="true"]{border-color:var(--text)}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-text);font-weight:600}
+.info{margin-top:14px;padding:12px 14px;border-left:4px solid var(--accent);background:var(--surface);border-radius:8px;border:1px solid var(--border);border-left-width:4px}
+.info p{margin:0}
+.info .phi{margin-top:4px;color:var(--muted);font-size:.92rem}
+label{display:flex;align-items:center;gap:10px;color:var(--text)}
+input[type=range]{flex:1;min-width:120px;accent-color:var(--accent)}
+.note{color:var(--muted);font-size:.85rem;margin:14px 0 0}
+</style>
+</head>
+<body>
+<main>
+  <h1>Elektromagnetische Welle</h1>
+  <p class="sub">E-Feld und B-Feld einzeln ein- und ausblenden und zwischen Fernfeld und Nahfeld wechseln.</p>
+
+  <div class="card"><canvas id="cv" role="img" aria-label="Animation einer elektromagnetischen Welle mit E-Feld und B-Feld"></canvas></div>
+
+  <div class="controls card">
+    <div class="group">
+      <h2>Felder</h2>
+      <div class="row">
+        <button id="tE" role="switch" aria-checked="true"><span class="dot"></span>E-Feld</button>
+        <button id="tB" role="switch" aria-checked="true"><span class="dot"></span>B-Feld</button>
+        <button id="tV" role="switch" aria-checked="true">Feldvektoren</button>
+      </div>
+    </div>
+    <div class="group seg">
+      <h2>Bereich</h2>
+      <div class="row">
+        <button id="mFar" aria-pressed="true">Fernfeld</button>
+        <button id="mNear" aria-pressed="false">Nahfeld</button>
+      </div>
+    </div>
+    <div class="group">
+      <h2>Animation</h2>
+      <div class="row">
+        <button id="pp">Pause</button>
+        <label>Tempo <input id="sp" type="range" min="0.2" max="2" step="0.1" value="1" aria-label="Geschwindigkeit"></label>
+      </div>
+    </div>
+  </div>
+
+  <div class="info" aria-live="polite">
+    <p id="txt"></p>
+    <p class="phi">Phasenverschiebung Δφ = <strong id="dphi">0°</strong></p>
+  </div>
+  <p class="note">Vereinfachte Darstellung: Das E-Feld schwingt senkrecht (blau), das B-Feld in der dazu senkrechten Ebene (orange), die Welle läuft nach rechts in Richtung c.</p>
+</main>
+
+<script>
+(function(){
+  var cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+  var $=function(id){return document.getElementById(id)};
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var st={E:true,B:true,V:true,paused:reduce,speed:1,ph:0,delta:0,target:0,W:0,H:0};
+  var TXT={
+    far:'Fernfeld / Vakuum: E- und B-Feld schwingen in Phase. Beide erreichen Maximum und Nulldurchgang gleichzeitig. Dabei gilt B ⊥ E, E ⊥ c und B ⊥ c. Die Ausbreitungsgeschwindigkeit ist die Lichtgeschwindigkeit c.',
+    near:'Nahfeld: E- und B-Feld sind phasenverschoben (hier um 90°). Ist das E-Feld maximal, ist das B-Feld null – und umgekehrt.'
+  };
+
+  function resize(){
+    var w=cv.parentElement.clientWidth-24;
+    st.W=w; st.H=Math.round(Math.min(460,Math.max(250,w*0.48)));
+    var d=window.devicePixelRatio||1;
+    cv.style.height=st.H+'px'; cv.width=Math.round(w*d); cv.height=Math.round(st.H*d);
+    ctx.setTransform(d,0,0,d,0,0);
+  }
+  function col(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+  function arrow(x1,y1,x2,y2,c,lw,hs){
+    ctx.strokeStyle=c; ctx.fillStyle=c; ctx.lineWidth=lw;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    var a=Math.atan2(y2-y1,x2-x1);
+    ctx.beginPath(); ctx.moveTo(x2,y2);
+    ctx.lineTo(x2-hs*Math.cos(a-0.4),y2-hs*Math.sin(a-0.4));
+    ctx.lineTo(x2-hs*Math.cos(a+0.4),y2-hs*Math.sin(a+0.4)); ctx.closePath(); ctx.fill();
+  }
+  function draw(){
+    var W=st.W,H=st.H; ctx.clearRect(0,0,W,H);
+    var ce=col('--e'),cb=col('--b'),ca=col('--axis'),cm=col('--muted');
+    var x0=W*0.07,x1=W*0.9,oy=H*0.5,lam=W*0.34,k=2*Math.PI/lam;
+    var A=Math.min(H*0.3,lam*0.45), dx=-0.13*lam, dy=Math.min(0.28*lam,H*0.27);
+    var fe=function(x){return Math.sin(k*(x-x0)-st.ph)};
+    var fb=function(x){return Math.sin(k*(x-x0)-st.ph-st.delta)};
+    var fs=Math.max(12,Math.min(16,W/40));
+
+    // Bezugsachsen (gestrichelt)
+    ctx.save(); ctx.setLineDash([4,5]); ctx.strokeStyle=cm; ctx.globalAlpha=.55; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(x0,oy-A-6); ctx.lineTo(x0,oy+A+6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x0-dx*1.05,oy-dy*1.05); ctx.lineTo(x0+dx*1.05,oy+dy*1.05); ctx.stroke();
+    ctx.restore();
+    ctx.font='italic 700 '+(fs+2)+'px system-ui,sans-serif'; ctx.textAlign='center';
+    ctx.fillStyle=ce; ctx.fillText('E',x0,oy-A-12);
+    ctx.fillStyle=cb; ctx.fillText('B',x0+dx*1.05-12,oy+dy*1.05+16);
+
+    function layer(f,color,px,py,on){
+      if(!on) return;
+      var i,x,v,pts=[];
+      for(x=x0;x<=x1;x+=2){v=f(x); pts.push([px(x,v),py(v)]);}
+      ctx.beginPath(); ctx.moveTo(x0,oy);
+      for(i=0;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+      ctx.lineTo(x1,oy); ctx.closePath();
+      ctx.globalAlpha=.2; ctx.fillStyle=color; ctx.fill(); ctx.globalAlpha=1;
+      if(st.V){
+        for(x=x0+lam/16;x<x1-4;x+=lam/8){
+          v=f(x); var tx=px(x,v),ty=py(v);
+          if(Math.hypot(tx-x,ty-oy)>9) arrow(x,oy,tx,ty,color,1.8,7);
+        }
+      }
+      ctx.beginPath();
+      for(i=0;i<pts.length;i++){ if(i)ctx.lineTo(pts[i][0],pts[i][1]); else ctx.moveTo(pts[i][0],pts[i][1]); }
+      ctx.strokeStyle=color; ctx.lineWidth=3.5; ctx.lineJoin='round'; ctx.stroke();
+    }
+    layer(fb,cb,function(x,v){return x+dx*v},function(v){return oy+dy*v},st.B);
+    layer(fe,ce,function(x){return x},function(v){return oy-A*v},st.E);
+
+    // Ausbreitungsachse
+    arrow(x0-14,oy,W-10,oy,ca,2.5,11);
+    ctx.fillStyle=ca; ctx.font='italic 700 '+(fs+4)+'px system-ui,sans-serif'; ctx.textAlign='right';
+    ctx.fillText('c',W-14,oy+fs+14);
+  }
+
+  var last=performance.now();
+  function frame(now){
+    var dt=Math.min(0.05,(now-last)/1000); last=now;
+    if(!st.paused) st.ph+=dt*st.speed*2.2;
+    st.delta+=(st.target-st.delta)*Math.min(1,dt*5);
+    if(Math.abs(st.target-st.delta)<0.002) st.delta=st.target;
+    $('dphi').textContent=Math.round(st.delta*180/Math.PI)+'°';
+    draw(); requestAnimationFrame(frame);
+  }
+
+  function sw(id,key){
+    var b=$(id);
+    b.addEventListener('click',function(){
+      st[key]=!st[key]; b.setAttribute('aria-checked',st[key]);
+    });
+  }
+  sw('tE','E'); sw('tB','B'); sw('tV','V');
+  function mode(near){
+    st.target=near?Math.PI/2:0;
+    $('mFar').setAttribute('aria-pressed',!near); $('mNear').setAttribute('aria-pressed',near);
+    $('txt').textContent=near?TXT.near:TXT.far;
+  }
+  $('mFar').addEventListener('click',function(){mode(false)});
+  $('mNear').addEventListener('click',function(){mode(true)});
+  $('pp').addEventListener('click',function(){
+    st.paused=!st.paused; $('pp').textContent=st.paused?'Weiter':'Pause';
+  });
+  $('sp').addEventListener('input',function(e){st.speed=parseFloat(e.target.value)});
+  if(reduce) $('pp').textContent='Weiter';
+  window.addEventListener('resize',resize);
+  mode(false); resize(); requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
